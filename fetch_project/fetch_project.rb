@@ -38,12 +38,6 @@ def students
   return CSV.read(USERNAME_FILE).map { |a| Hash[keys.zip(a)] }
 end
 
-def check_for_error(status)
-  if status.exitstatus != 0
-    raise FetchProjectError, "Process exited with non-zero status code"
-  end
-end
-
 def fetch_project(project, students)
   puts "Fetching submissions for #{project}"
 
@@ -52,10 +46,14 @@ def fetch_project(project, students)
     puts "Fetching project for #{student[:first_name]}, account #{student[:username]}"
 
     puts `git remote add #{student[:first_name]} "https://github.com/#{student[:username]}/#{project}.git"`
-    check_for_error($CHILD_STATUS)
+    if $CHILD_STATUS.exitstatus != 0
+      puts "Could not add remote for student #{student[:first_name]}"
+    end
 
     puts `git fetch #{student[:first_name]} || git remote remove $NAME`
-    check_for_error($CHILD_STATUS)
+    if $CHILD_STATUS.exitstatus != 0
+      puts "Could not fetch repo for student #{student[:first_name]}"
+    end
   end
 end
 
