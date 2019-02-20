@@ -6,12 +6,12 @@
 require 'csv'
 
 INSTALL_TARGET = "/usr/local/bin/fetch_project"
-USERNAME_FILE = "#{ENV['HOME']}/Ada/c10/usernames.csv"
+USERNAME_FILE = "#{ENV['HOME']}/Ada/c11/usernames.csv"
 SETUP_INSTRUCTIONS = <<END_INSTR
 1. Copy the table from the repo view in the classroom app
 2. Paste it into a file ~/Ada/cx/usernames.csv
-3. Use Atom's regex search/replace to transform the data
-    Search:  ^(.*) .*\\t(.*)\\t.*\\t.*Feedback\\t?$
+3. Use VS Code's search/replace to transform the data
+    Search:  ^([^ ]*) .*\t([^:]*)\t(.*:.*\t)?.*(Feedback|Notification).*$
     Replace: $1,$2
 END_INSTR
 
