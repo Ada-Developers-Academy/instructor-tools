@@ -4,9 +4,13 @@
 # $ ./fetch_project.rb --install
 
 require 'csv'
+require 'optparse'
 
-INSTALL_TARGET = "/usr/local/bin/fetch_project"
+# Tasty defaults - see parse_options below
+INSTALL_TARGET = "/usr/local/bin/"
+SCRIPT_NAME = 'fetch_project'
 USERNAME_FILE = "#{ENV['HOME']}/Ada/c11/usernames.csv"
+
 SETUP_INSTRUCTIONS = <<END_INSTR
 1. Copy the table from the repo view in the classroom app
 2. Paste it into a file ~/Ada/cx/usernames.csv
@@ -17,6 +21,8 @@ END_INSTR
 
 class FetchProjectError < StandardError; end
 class InstallationError < StandardError; end
+
+
 
 def project_name
   return ARGV[1] if ARGV[1]
@@ -33,50 +39,59 @@ def project_name
   raise FetchProjectError, "Could not detect project name. Are you in the project repo?"
 end
 
-def students
+def students(username_file)
   keys = [:first_name, :username]
-  return CSV.read(USERNAME_FILE).map { |a| Hash[keys.zip(a)] }
+  students = CSV.read(username_file).map { |a| Hash[keys.zip(a)] }
+  puts "Read #{students.length} students from #{username_file}"
+  return students
 end
 
-def fetch_project(project, students)
+def fetch_project(project, students, options)
   puts "Fetching submissions for #{project}"
-
 
   students.each do |student|
     puts "Fetching project for #{student[:first_name]}, account #{student[:username]}"
 
-    puts `git remote add #{student[:first_name]} "https://github.com/#{student[:username]}/#{project}.git"`
-    if $CHILD_STATUS.exitstatus != 0
-      puts "Could not add remote for student #{student[:first_name]}"
-    end
+    unless options[:dryrun]
+      puts `git remote add #{student[:first_name]} "https://github.com/#{student[:username]}/#{project}.git"`
+      if $CHILD_STATUS.exitstatus != 0
+        puts "Could not add remote for student #{student[:first_name]}"
+      end
 
-    puts `git fetch #{student[:first_name]} || git remote remove $NAME`
-    if $CHILD_STATUS.exitstatus != 0
-      puts "Could not fetch repo for student #{student[:first_name]}"
+      puts `git fetch #{student[:first_name]} || git remote remove $NAME`
+      if $CHILD_STATUS.exitstatus != 0
+        puts "Could not fetch repo for student #{student[:first_name]}"
+      end
     end
   end
 end
 
-def install
-  if File.exist?(INSTALL_TARGET)
-    raise InstallationError, "Install target #{INSTALL_TARGET} already exists!"
+def install(install_location)
+  if File.directory?(install_location)
+    install_location = File.join(install_location, SCRIPT_NAME)
   end
 
-  puts "Installing to #{INSTALL_TARGET}"
+  if File.exist?(install_location)
+    raise InstallationError, "Install target #{install_location} already exists!"
+  end
+
+  puts "Installing to #{install_location}"
 
   script_location = `realpath #{__FILE__}`.strip
   puts "Creating symlink pointing at #{script_location}"
 
-  command = "ln -s #{script_location} #{INSTALL_TARGET}"
+  command = "ln -s #{script_location} #{install_location}"
   puts "Creating symplink with command:\n  #{command}"
   puts `#{command}`
 
   if $CHILD_STATUS.exitstatus != 0
     raise InstallationError, "ln -s exited with non-0 status!"
   end
+
+  puts "Installed successfully"
 end
 
-def check_setup
+def check_setup(username_file)
   if $PROGRAM_NAME.include?('.rb')
     puts "NOTE: it looks like you're running this file directly."
     puts "You might want to install it:"
@@ -84,20 +99,47 @@ def check_setup
     sleep(2)
   end
 
-  unless File.exist?(USERNAME_FILE)
-    puts "Could not find list of usernames at #{USERNAME_FILE}"
+  unless File.exist?(username_file)
+    puts "Could not find list of usernames at #{username_file}"
     puts "In order to use this program, please follow these steps:"
     puts SETUP_INSTRUCTIONS
     raise InstallationError, "Improper setup"
   end
 end
 
+def parse_options
+  options = {
+    install_location: INSTALL_TARGET,
+    username_file: USERNAME_FILE
+  }
+  OptionParser.new do |parser|
+    parser.banner = "Usage: fetch_project.rb [options]"
+
+    parser.on("--install [LOCATION]", "Install this script") do |install_location|
+      options[:install] = true
+      if install_location
+        options[:install_location] = install_location
+      end
+    end
+    parser.on("--usernames LOCATION", "Username file location") do |location|
+      options[:username_file] = location
+    end
+    parser.on("--dryrun", "Print work, but don't actually fetch projects") do
+      options[:dryrun] = true
+    end
+  end.parse!
+  return options
+end
+
 def main
-  if ARGV[0] == "--install"
-    install
+  options = parse_options
+  if options[:install]
+    puts "installing to #{options[:install_location]}"
+    install(options[:install_location])
   else
-    check_setup
-    fetch_project(project_name, students)
+    check_setup(options[:username_file])
+    student_list = students(options[:username_file])
+    fetch_project(project_name, student_list, options)
   end
 end
 
